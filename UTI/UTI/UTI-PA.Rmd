@@ -1,0 +1,662 @@
+---
+title: "UTI-AB"
+author: "Yiziying Chen"
+date: "2/20/2019"
+output: html_document
+---
+
+```{r}
+#12.9/10K PY AT 1998
+#18.4/10k py at 2011
+y = c(12.9, 18.4)
+x = c(1998, 2011)
+lm(y ~ x)
+```
+
+```{r warning=FALSE}
+library(stats4)
+setwd( "/Users/yiziyingchen/Desktop/Townsend/UTI")
+library("readxl")
+uti.PA =  read_excel("UTI.xlsx", sheet = 'PA')
+uti.PA$iso = uti.PA$`CDDEP Isolates_PA`+uti.PA$`MERCK Isolates_PA`
+uti.PA$resis = uti.PA$Resistance_PA...3 + uti.PA$Resistance_PA...6
+uti.PA$freq = uti.PA$resis/uti.PA$iso
+
+t = seq(0,11,1)
+uti.consump = uti.PA$Consumption
+
+uti.d1 = c()
+uti.d2 = c()
+uti.c3 = c()
+uti.d4 = c()
+uti.d5 = c()
+uti.d.mean = c()
+uti.theta.m <- c()
+set.seed(12345)
+for (i in 1:1000){
+  uti.d1 <- rnorm(1, 0.989, 0.006)
+  uti.d2 <- rnorm(1, 0.964, 0.008)
+  uti.d3 <- rnorm(1, 0.974, 0.013)
+  uti.d4 <- rnorm(1, 0.985, 0.005)
+  uti.d5 <- rnorm(1, 0.982, 0.007)
+  uti.d.mean <- (uti.d1+uti.d2+uti.d3+uti.d4+uti.d5)/5
+  uti.theta.m <- c(uti.theta.m, uti.d.mean)
+}
+
+
+
+uti.pa.theta.l <- sort(uti.theta.m)[250]
+uti.pa.theta <- sort(uti.theta.m)[500]
+uti.pa.theta.u <- sort(uti.theta.m)[750]
+uti.pa.k <- uti.PA$resis
+uti.pa.n <- uti.PA$iso
+uti.a <- sum(uti.PA$Consumption)/12
+uti.pa.a <- rep(uti.a, 12)
+```
+
+
+
+```{r eval = FALSE}
+#use optim
+ll <- function(param){
+  r0 = param[1]
+  rho = param[2]
+  #sum(log(dbinom(pa.k, pa.n, exp((rho*PA$consump+pa.theta -1)*t)/(1/r0-1+exp((rho*PA$consump + pa.theta-1)*t)))))
+  R <- dbinom(uti.pa.k, uti.pa.n, exp((rho*uti.PA$consump+uti.pa.theta -1)*t)/(1/r0-1+exp((rho*uti.PA$consump + uti.pa.theta-1)*t)))
+  -sum(log(R))
+}
+pa.rho2 = optim(par = c(uti.PA$freq[1],0), ll)$par[2]
+
+pa.r02 = optim(par = c(uti.PA$freq[1],0), ll)$par[1]
+pa.rt2 <- exp((pa.rho2*uti.PA$consump+pa.theta -1)*t)/(1/pa.r02-1+exp((pa.rho2*uti.PA$consump + pa.theta-1)*t))
+cbind(pa.rho2, pa.r02)
+plot(pa.rt2,  ylab = "r(t)", main = "Fitted r(t)",x = c(2000:2012),type = "l")
+```
+
+```{r eval = False}
+#find rho value by assuming equal a(t) and fit linear regression
+library(nlme)
+uti.PA$iso = uti.PA$`CDDEP Isolates_PA`+uti.PA$`MERCK Isolates_PA`
+uti.PA$resis = uti.PA$Resistance_PA...3 + uti.PA$Resistance_PA...6
+uti.PA$freq = uti.PA$resis/uti.PA$iso
+t = seq(0,11,1)
+uti.at <- sum(uti.PA$Consumption)/12
+freq.inv = 1/uti.PA$freq
+freq.inv[3] = freq.inv[2]
+uti.fit2 <- lm(log(freq.inv -1) ~ t)
+uti.inter1 <- summary(uti.fit2)$coefficient[1]         
+uti.slope1 <- summary(uti.fit2)$coefficient[2]         
+uti.pa.m1 = -uti.slope1
+uti.pa.rho = (uti.pa.m1-(uti.pa.theta -1))/uti.a
+uti.pa.r0 = 1/(exp(uti.inter1)+1)
+
+uti.pa.rt1 <- exp((uti.pa.rho*uti.PA$Consumption+uti.pa.theta-1)*t) / (1/uti.pa.r0 -1 + exp((uti.pa.rho*uti.PA$Consumption+uti.pa.theta-1)*t))
+
+#plot projected rt 2011-2014
+library(calibrate)
+cbind(uti.pa.rho, uti.pa.r0)
+plot((2000+t), uti.pa.rt1, type = "l", xlab = "Year", ylab = "Resistance Frequency", main = "Projection of Resistance Frequency from CPB prescription due to PA")
+data.frame(uti.pa.rt1, uti.PA$freq)
+```
+
+#general without stewardship
+```{r}
+uti.consump <- lm(Consumption ~ t, data = uti.PA)
+
+t.g<- seq(12,40,1)
+uti.consump.trend.g<-sapply(t.g, function(i) (summary(uti.consump)$coefficients[1] + i*summary(uti.consump)$coefficients[2]))
+uti.m.trend.g <- uti.pa.rho*uti.consump.trend.g + uti.pa.theta -1
+uti.rt.trend.g <- exp(uti.m.trend.g*t.g) / (1/uti.pa.r0 -1 + exp(uti.m.trend.g*t.g))
+```
+
+#without st
+```{r}
+t2 <- seq(21,25,1)
+t3 <- seq(26,30,1)
+t4 <- seq(31,35,1)
+
+rt <- function(t_start,t_end, t){
+  uti.m.trend <- uti.pa.rho*uti.consump.trend.g[t_start:t_end] + uti.pa.theta-1
+  uti.rt.trend <- exp(uti.m.trend*t) / (1/uti.pa.r0 -1 + exp(uti.m.trend*t))
+  return(uti.rt.trend)
+}
+
+uti.rt2020 <- rt(10,14,t2)
+uti.rt2025 <- rt(15,19,t3)
+uti.rt2030 <- rt(20,24,t4)
+```
+
+#with st
+```{r}
+uti.consump.trend <-c()
+uti.c.trend <- c()
+rt_st <- function(t_start, t_end, t){
+  for (i in 1:5){
+    uti.consump.trend[i] <- (1-(0.517/5)*i)*uti.consump.trend.g[i+t_start-12]
+    uti.c.trend <- c(uti.c.trend, uti.consump.trend[i])
+  }
+  uti.m.trend <-  uti.pa.rho*uti.c.trend + uti.pa.theta -1
+  uti.rt.trend <- exp(uti.m.trend*t) / (1/uti.pa.r0 -1 + exp(uti.m.trend*t))
+  return(uti.rt.trend)
+}
+
+uti.rt2020st <- rt_st(21,25,t2)
+uti.rt2025st <- rt_st(25,29,t3)
+uti.rt2030st <- rt_st(30,34,t4)
+
+
+```
+
+
+```{r}
+uti.consump <- lm(Consumption ~ t, data = uti.PA)
+uti.data <- data.frame(consump = uti.PA$Consumption, time = t)
+uti.consump1 <- lm(consump ~ time, data = uti.data)
+uti.conf.int <- predict(uti.consump1, interval = "conf", newdata = data.frame(time = c(12:40)))
+uti.consump.l <- as.numeric(uti.conf.int[,2])
+uti.consump.u <- as.numeric(uti.conf.int[,3])
+uti.consump.g <- as.numeric(uti.conf.int[,1])
+
+t.g<- seq(12,40,1)
+#uti.consump.trend.g<-sapply(t.g, function(i) (summary(uti.consump)$coefficients[1] + i*summary(uti.consump)$coefficients[2]))
+uti.rt.trend.g <- exp((uti.pa.rho*uti.consump.g + uti.pa.theta -1)*t.g) / (1/uti.pa.r0 -1 + exp((uti.pa.rho*uti.consump.g + uti.pa.theta -1)*t.g))
+uti.rt.trend.l <- exp((uti.pa.rho*uti.consump.l + uti.pa.theta.l -1)*t.g) / (1/uti.pa.r0 -1 + exp((uti.pa.rho*uti.consump.l + uti.pa.theta.l -1)*t.g))
+uti.rt.trend.u <- exp((uti.pa.rho*uti.consump.u + uti.pa.theta.u -1)*t.g) / (1/uti.pa.r0 -1 + exp((uti.pa.rho*uti.consump.u + uti.pa.theta.u -1)*t.g))
+
+uti.rt.trend.l
+uti.rt.trend.u
+uti.rt.trend.g
+```
+
+
+##MCMC inference for CI
+```{r}
+##resampling consump
+uti.fit1 <- lm(log(1/uti.PA$freq -1) ~ c(0:11))
+uti.fit2 <- lm(log(1/uti.rt.trend.g -1) ~ c(12:40))
+
+resampled.consump <- matrix(NA, nrow = 1000, ncol = length(uti.consump.trend.g))
+for (i in 1:1000){
+  for (j in 1:length(uti.consump.trend.g)){
+    resampled.consump[i,j] = rnorm(1,uti.consump.trend.g[j],1)
+  }
+}
+
+for (i in 1:length(uti.consump.trend.g)){
+  resampled.consump[,i] = sort(resampled.consump[,i])
+}
+
+uti.consump.l <- resampled.consump[250,]
+uti.consump.u <- resampled.consump[750,]
+
+##resampling theta
+uti.d1 = c()
+uti.d2 = c()
+uti.c3 = c()
+uti.d4 = c()
+uti.d5 = c()
+uti.d.mean = c()
+uti.theta.m.sim <- c()
+set.seed(12345)
+for (i in 1:1000){
+  uti.d1 <- rnorm(1, 0.989, 0.006)
+  uti.d2 <- rnorm(1, 0.964, 0.008)
+  uti.d3 <- rnorm(1, 0.974, 0.013)
+  uti.d4 <- rnorm(1, 0.985, 0.005)
+  uti.d5 <- rnorm(1, 0.982, 0.007)
+  uti.d.mean <- (uti.d1+uti.d2+uti.d3+uti.d4+uti.d5)/5
+  uti.theta.m.sim <- c(uti.theta.m, uti.d.mean)
+}
+
+uti.theta.m <- mean(0.989, 0.964,0.974, 0.985, 0.982)
+
+uti.theta.l <- sort(uti.theta.m.sim)[250]
+uti.theta.u <- sort(uti.theta.m.sim)[750]
+
+
+uti.m.l <- uti.pa.rho*uti.consump.l + uti.theta.l -1
+uti.rt.l <- exp(uti.m.l*t.g) / (1/uti.pa.r0 -1 + exp(uti.m.l*t.g))
+
+uti.m.u <- uti.pa.rho*uti.consump.u + uti.theta.u -1
+uti.rt.u <- exp(uti.m.u*t.g) / (1/uti.pa.r0 -1 + exp(uti.m.u*t.g))
+
+##MCMC CI
+rt.mcmc.l <- matrix(NA, ncol = 29, nrow = 1000)
+rt.mcmc.u <- matrix(NA, ncol = 29, nrow = 1000)
+for (i in 1:1000){
+  for (j in 1:29){
+      rt.mcmc.l[i,j] <- rnorm(1, uti.rt.l[j],1)
+      rt.mcmc.u[i,j] <- rnorm(1, uti.rt.u[j],1)
+  }
+}
+
+for (i in 1:29){
+  rt.mcmc.l[,i] = sort(rt.mcmc.l[,i])
+  rt.mcmc.u[,i] = sort(rt.mcmc.u[,i])
+}
+
+rt.mcmc.u[250,]
+rt.mcmc.u[750,]
+
+uti.conf.int <- predict(uti.fit1, interval = "conf", newdata = data.frame(c(0:11)))
+uti.simreg1 <- function(mod = uti.fit1){
+  a = coef(mod)[1]
+  b = coef(mod)[2]
+  rse = summary(mod)$sigma
+  x = c(0:40)
+  y.sim <- rnorm(n = length(x), mean = a+b*x, sd = rse)
+  lm.sim <- lm(y.sim ~ x)
+  coef(lm.sim)
+#pa.m = -b
+#pa.rho = (pa.m-(pa.theta -1))/at
+#pa.r0 = 1/(exp(a)+1)
+
+#pa.rt <- exp((pa.rho*PA$consump+pa.theta-1)*t) / (1/pa.r0 -1 + #exp((pa.rho*PA$consump+pa.theta-1)*t))
+}
+
+set.seed(12345)
+uti.rt.all = c()
+for(i in 1:12){
+  uti.rt.sim <- rnorm(n = 1000, mean = uti.PA$freq, sd = summary(uti.fit1)$sigma)
+  uti.rt.sim <- uti.rt.sim[order(uti.rt.sim)]
+  uti.rt.all <- cbind(uti.rt.all, uti.rt.sim)
+  uti.CI.l <- uti.rt.all[250,]
+  uti.CI.u <- uti.rt.all[750,]
+}
+
+utifreq.rt.l <- as.vector(uti.CI.l)
+utifreq.rt.u <- as.vector(uti.CI.u)
+
+
+uti.rt.sim.2020 <- rnorm(n = 1000, mean = max(uti.rt2020st), sd = summary(uti.fit1)$sigma)
+uti.rt.sim.2020 <- uti.rt.sim.2020[order(uti.rt.sim.2020)]
+uti.rt.sim.2020[250]
+uti.rt.sim.2020[750]
+
+uti.rt.sim.2030 <- rnorm(n = 1000, mean = max(uti.rt2030st), sd = summary(uti.fit1)$sigma)
+uti.rt.sim.2030 <- uti.rt.sim.2030[order(uti.rt.sim.2030)]
+uti.rt.sim.2030[250]
+uti.rt.sim.2030[750]
+
+#MC simulation
+N <- 1000
+uti.simulated.coef <- replicate(N, uti.simreg1())
+uti.simulated.coef <- t(uti.simulated.coef)
+sd(uti.simulated.coef[,1])
+sd(uti.simulated.coef[,2])
+summary(uti.fit1)$coef[,1:2]
+#MCMC CI for the slope
+uti.slop.ci <- quantile(uti.simulated.coef[,2], c(0.025, 0.975))
+#MCMC CI for the intercept
+uti.inter.ci <- quantile(uti.simulated.coef[,1], c(0.025, 0.975))
+#acutal intercept CI
+confint(uti.fit1)[1,]
+#acutal slope CI
+confint(uti.fit1)[2,]
+
+
+#rho CI
+uti.pa.m.l = -uti.slop.ci[2]
+uti.pa.m.u = -uti.slop.ci[1]
+uti.pa.rho.l = (uti.pa.m.l-(uti.pa.theta.l -1))/uti.at
+uti.pa.rho.u = (uti.pa.m.u-(uti.pa.theta.u -1))/uti.at
+c(uti.pa.rho.l, uti.pa.rho.u)
+#r0 CI
+uti.inter.ci.l = uti.inter.ci[2]
+uti.inter.ci.u = uti.inter.ci[1]
+uti.pa.r0.l = 1/(exp(uti.inter.ci.l)+1)
+uti.pa.r0.u = 1/(exp(uti.inter.ci.u)+1)
+c(uti.pa.r0.l, uti.pa.r0.u)
+
+uti.m.trend.g.l <- uti.pa.rho.l*c(uti.consump.trend.g) + uti.pa.theta.l -1
+uti.m.trend.g.u <- uti.pa.rho.u*c(uti.consump.trend.g) + uti.pa.theta.u -1
+
+uti.rt.trend.g.l <- exp(uti.m.trend.g.l*c(12:40)) / (1/uti.pa.r0.l -1 + exp(uti.m.trend.g.l*c(12:40)))
+uti.rt.trend.g.u <- exp(uti.m.trend.g.u*c(12:40)) / (1/uti.pa.r0.l -1 + exp(uti.m.trend.g.u*c(12:40)))
+
+data.frame(year = 2012:2040, lwr = uti.rt.trend.g.l, upr = uti.rt.trend.g.u, uti.rt.trend.g)
+
+
+#0:12 CI
+utifreq.rt.l <- uti.PA$freq - 1.96*sqrt(uti.PA$freq*(1-uti.PA$freq)/uti.PA$iso)
+utifreq.rt.u <- uti.PA$freq + 1.96*sqrt(uti.PA$freq*(1-uti.PA$freq)/uti.PA$iso)
+
+rt = matrix(nrow = 1000, ncol = 29)
+for (i in 1:29){
+  rt[,i] = rnorm(n = 1000, mean = uti.rt.trend.g.l[i], sd = summary(uti.fit1)$sigma)
+  rt[,i] = sort(rt[,i])
+}
+
+rtl = rt[250,]
+rtu = rt[750,]
+#pa.rho.l = (pa.m.l-(uti.pa.theta -1))/at
+#pa.rho.u = (pa.m.u-(uti.pa.theta -1))/at
+
+#sd(simulated.coef[,1])
+#sd(simulated.coef[,2])
+
+
+#m.l <- pa.rho.l*at + uti.pa.theta -1
+#m.u <- pa.rho.u*at + uti.pa.theta -1
+#rt.l <- exp(m.l*c(0:12)) / (1/pa.r0.l -1 + exp(m.l*c(0:12)))
+#rt.u <- exp(m.u*c(0:12)) / (1/pa.r0.u -1 + exp(m.u*c(0:12)))
+```
+
+##plot rt CI
+```{r}
+require(ggplot2)
+require(plotrix)
+require(grid)
+require(gridExtra)
+uti.dat <- data.frame(Year = 2000:2040, y = c(uti.PA$freq, uti.rt.trend.g[1:9], uti.rt2020st, rep(min(uti.rt2020st),15), uti.PA$freq, uti.rt.trend.g[1:14], uti.rt2025st, rep(min(uti.rt2025st),10), uti.PA$freq, uti.rt.trend.g[1:19], uti.rt2030st, rep(min(uti.rt2030st),5), uti.PA$freq, uti.rt.trend.g),  
+                      lwr = rep(c(utifreq.rt.l, rep(NA,29)),4), 
+                      upr = rep(c(utifreq.rt.u, rep(NA,29)),4),
+                      l = rep(c(rep(NA,12),uti.rt.trend.l),4), 
+                      u = rep(c(rep(NA,12),uti.rt.trend.u),4), 
+                      Year.Start = factor(c(rep(2020,41), rep(2025,41), rep(2030,41), rep("none", 41))), 
+                      Stewardship = factor(c(rep("with stewarship", 41*3), rep("no stewarship", 41))))
+
+uti1 <- data.frame(Year = 2000:2011, y = uti.PA$freq, Stewardship = NA)
+uti2 <- data.frame(Year = 2000:2040, y= c(uti.PA$freq,uti.rt.trend.g), Stewardship = NA)
+uti3 <- data.frame(Year = 2012:2040, y= uti.rt.trend.g, Stewardship = NA)
+
+p.uti <- ggplot(uti.dat, aes(x=Year, y=y, color=Year.Start)) + 
+geom_line(aes(linetype = Stewardship)) + scale_linetype_manual(values=c("solid", "dotdash")) + scale_colour_manual(values=c("blue", "purple", "red", "black"))+ theme(legend.position = "none") +  theme_classic() + ylab("Resistance Frequency") + theme(legend.position ="bottom", axis.text=element_text(size=14), axis.title=element_text(size=14,face="bold")) +  geom_errorbar(aes(ymin = lwr, ymax = upr), width = 0.4, color = "darkorange") + geom_ribbon(aes(ymin=l,ymax=u),alpha=0.2, fill = "blue",colour = NA) + theme_classic() + ylab("Resistance Frequency") + ggtitle("UTI") + theme(plot.title =element_text(size=16, face="bold", hjust = 0.5), axis.title.y = element_text(size = 13), axis.title.x = element_text(size = 13), axis.text.x = element_text(size=13),axis.text.y = element_text(size=13))
+
+jpeg(file="/Users/yiziyingchen/Desktop/Townsend/P.A./uti2_rt.jpeg",
+width=500, height=400)
+
+ggsave("uti2_rt.jpeg", width = 7, height = 5)
+p.uti.plot2 <- p.uti + theme(plot.title =element_text(size=18, face="bold", hjust = 0.5), legend.position ="none")
+```
+
+#compare start vs. end rt
+```{r}
+#Resistance frequency compare
+library(scales)
+rt.compare <- function(x1, x2) percent(((max(x1) - min(x2)) / min(x2)))
+#2020 intervention
+uti.inter1 <- rt.compare(uti.rt2020, uti.rt2020st)
+#2025 intervention
+uti.inter2 <- rt.compare(uti.rt2025, uti.rt2025st)
+#2030 intervention
+uti.inter3<- rt.compare(uti.rt2030, uti.rt2030st)
+intervention <- c(2020,2025,2030)
+#5-year RF change percentage with intervention
+uti.RF_diff <- c(uti.inter1, uti.inter2, uti.inter3)
+data.frame(intervention,uti.RF_diff)
+#5-year end point RF
+uti.START_RF = c(max(uti.rt2020), max(uti.rt2025), max(uti.rt2030))
+uti.END_RF = c(min(uti.rt2020st), min(uti.rt2025st), min(uti.rt2030st))
+data.frame(intervention, uti.START_RF, uti.END_RF)
+
+path = "/Users/yiziyingchen/Desktop/Townsend/P.A./"
+
+library(openxlsx)
+write.xlsx(data.frame(intervention, uti.START_RF, uti.END_RF), file =  paste0(path, "uti_rf.xlsx"), append = FALSE)
+```
+
+```{r}
+jpeg(file="/Users/yiziyingchen/Desktop/Townsend/P.A./uti.rt.jpeg",
+width=500, height=400)
+#plot overlay resisatnce frequency with/out intervension
+plot(2000:2040, ylim = c(min(uti.PA$freq), max(uti.rt.trend.g)),y = c(uti.PA$freq, uti.rt.trend1, uti.rt.trend2.1, rep(min(uti.rt.trend2.1),15)), type = "l", xlab = "Year", ylab = "Resistance Frequency",main = "UTI", col = "blue", lty = 2)
+par(new = T)
+plot(2000:2040, ylim = c(min(uti.PA$freq), max(uti.rt.trend.g)),y = c(uti.PA$freq, uti.rt.trend1, uti.rt.trend2, uti.rt.trend3.1, rep(min(uti.rt.trend3.1),10)), type = "l", xlab = "Year", ylab = "Resistance Frequency",main = "UTI", col = "purple", lty = 2)
+par(new = T)
+plot(2000:2040, ylim = c(min(uti.PA$freq), max(uti.rt.trend.g)),y = c(uti.PA$freq, uti.rt.trend1, uti.rt.trend2, uti.rt.trend3, uti.rt.trend4.1, rep(min(uti.rt.trend4.1),5)), type = "l", xlab = "Year", ylab = "Resistance Frequency",main = "UTI", col = "red", lty = 2)
+par(new = T)
+plot(2000:2040, ylim = c(min(uti.PA$freq), max(uti.rt.trend.g)),y = c(uti.PA$freq, uti.rt.trend.g), type = "l", xlab = "Year", ylab = "Resistance Frequency",main = "UTI")
+#text(c(2000:2040), c(ab.rt,rt.trend.g), round(c(ab.rt,rt.trend.g),2),cex=0.75, col = "dark orange")
+
+legend(2000, 0.6, legend = c("without stewardship", "2020", "2025", "2030"), col = c("black", "blue", "purple", "red"), lty = c(1,2,2,2),cex=0.8, text.font=4, bg='lightblue')
+```
+
+
+
+
+```{r}
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+
+uti.legend <- get_legend(p.uti + theme(legend.title = element_text(size=14, face = "bold"), legend.text=element_text(size=12)))
+
+
+blankPlot <- ggplot()+geom_blank(aes(1,1)) + 
+  cowplot::theme_nothing()
+library("gridExtra")
+jpeg(file="/Users/yiziyingchen/Desktop/Townsend/P.A./all.rt1.jpeg",
+width=1000, height=800)
+#grid.arrange(p.uti.plot2, arrangeGrob(p.uti.plot2, p.uti.plot2, nrow=1),uti.legend,nrow=3, heights = c(8,8,2))
+
+bottom_rt <- cowplot::plot_grid(p.uti.plot2, p.uti.plot2, labels = c('B', 'C'), align = 'h', rel_widths = c(1, 1), label_size = 16)
+cowplot::plot_grid(p.uti.plot2, bottom_rt, labels = c('A', ''), ncol = 1, rel_heights = c(2.3, 2, 1), label_size = 16, uti.legend, hjust = -1)
+```
+
+#start vs. end rt
+```{r}
+#Resistance frequency compare
+library(scales)
+rt.compare <- function(x1, x2) percent(((max(x1) - min(x2)) / min(x2)))
+#2020 intervention
+uti.inter1 <- rt.compare(uti.rt2020, uti.rt2020st)
+#2025 intervention
+uti.inter2 <- rt.compare(uti.rt2025, uti.rt2025st)
+#2030 intervention
+uti.inter3<- rt.compare(uti.rt2030, uti.rt2030st)
+intervention <- c(2020,2025,2030)
+#5-year RF change percentage with intervention
+uti.RF_diff <- c(uti.inter1, uti.inter2, uti.inter3)
+data.frame(intervention,uti.RF_diff)
+#5-year end point RF
+uti.START_RF = c(max(uti.rt2020), max(uti.rt2025), max(uti.rt2030))
+uti.END_RF = c(min(uti.rt2020st), min(uti.rt2025st), min(uti.rt2030st))
+data.frame(intervention, uti.START_RF, uti.END_RF)
+
+path = "/Users/yiziyingchen/Desktop/Townsend/P.A./"
+
+library(openxlsx)
+write.xlsx(data.frame(intervention, uti.START_RF, uti.END_RF), file =  paste0(path, "uti_rf.xlsx"), append = FALSE)
+
+```
+
+##resistant cases difference
+```{r}
+y = c(12.9*10^-4, 18.4*10^-4)
+x = c(1998, 2011)
+fit = lm(y ~ x)
+year = c(2000:2012)
+uti = predict(fit,data.frame(x = year))
+uti.inc = max(uti)
+
+pop = read_excel("population.xlsx", sheet = 1)
+uti.pa = uti.PA$`UTI-PA`[12]
+cbp.uti = uti.PA$`CBP-UTI`[12]
+#ratio of pneu contributed by PA should not be decreasing; take the last time point
+in.cbp = 0.122622696
+##=2521/(2521+1803)
+#uti.pa =c()
+#p1 = c()
+#for(i in 15:40){
+  #p1 = summary(m1)$coefficient[1] + summary(m1)$coefficient[2]*i
+  #uti.pa = c(uti.pa,p1)
+#}
+
+#uti.pa
+
+uti.case = c()
+uti.cn = c()
+for(i in 19:40){
+  uti.cn = uti.pa*cbp.uti*pop$Population[(i-14)]*uti.inc
+  uti.case = c(uti.case,uti.cn)
+}
+case = c()
+case_reduc <- function(start, end){
+  for (i in 1:5)
+  case[i] <- (1-(0.517/5)*i)*uti.case[i+start-20]
+  return(case)
+}
+
+uti.c25 = uti.rt.trend.g[13]*uti.case[6]
+uti.c25.1 = uti.rt2020st[5]*case_reduc(21, 25)[5]
+uti.int.2020 = uti.c25 - uti.c25.1
+uti.c30 = uti.rt.trend.g[18]*uti.case[11]
+uti.c30.1 = uti.rt2025st[5]*case_reduc(26, 30)[5]
+uti.int.2025 = uti.c30 - uti.c30.1
+uti.c35 = uti.rt.trend.g[23]*uti.case[16]
+uti.c35.1 = uti.rt2030st[5]*case_reduc(31, 35)[5]
+uti.int.2030 = uti.c35 - uti.c35.1
+uti.CASE.diff = c(ceiling(uti.int.2020), ceiling(uti.int.2025), ceiling(uti.int.2030))
+YEAR = c(2020,2025,2030)
+
+#5-year end point resistance cases number across US
+uti.END.CASE <- ceiling(c(uti.c25.1, uti.c30.1, uti.c35.1))
+cbind(YEAR, uti.END.CASE)
+uti.NO.STEWARD = c(uti.c25, uti.c30, uti.c35)
+#5-year isolate case number change under intervention in US
+cbind(YEAR, uti.CASE.diff)
+cbind(YEAR, uti.NO.STEWARD)
+data.frame(YEAR, uti.END.CASE, uti.NO.STEWARD)
+
+write.xlsx(data.frame(YEAR, uti.END.CASE, uti.NO.STEWARD), file =  paste0(path, "uti_casecompare.xlsx"), append = FALSE)
+```
+
+```{r}
+uti.c.g1 <- uti.case[1:2]*uti.rt.trend.g[7:8]
+uti.c.g2 <- uti.case[1:7]*uti.rt.trend.g[7:13]
+uti.c.g3 <- uti.case[1:12]*uti.rt.trend.g[7:18]
+uti.c.2020 <- uti.case[3:7]*uti.rt2020st
+uti.c.2020.1<- rep(uti.c.2020[5],15)
+uti.c.2025 <- uti.case[8:12]*uti.rt2025st
+uti.c.2025.1<- rep(uti.c.2025[5],10)
+uti.c.2030 <- uti.case[13:17]*uti.rt2030st
+uti.c.2030.1<- rep(uti.c.2030[5],5)
+```
+
+##Saved Cases
+```{r}
+uti.Intervention.YEAR = c(2020,2025,2030)
+uti.case.diff.2020 = sum(uti.rt.trend.g[c(9:13)]*uti.case[c(2:6)] - uti.rt2020st*case_reduc(21, 25)) + sum(uti.rt.trend.g[c(14:28)]*uti.case[c(8:22)])-(uti.rt2020st[5]*case_reduc(21, 25)[5])*15
+uti.case.diff.2025 = sum(uti.rt.trend.g[c(14:18)]*uti.case[c(7:11)] - uti.rt2025st*case_reduc(26, 30)) + sum(uti.rt.trend.g[c(19:28)]*uti.case[c(13:22)])-(uti.rt2025st[5]*case_reduc(26, 30)[5])*10
+uti.case.diff.2030 = sum(uti.rt.trend.g[c(19:23)]*uti.case[c(12:16)] - uti.rt2030st*case_reduc(31, 35)) + sum(uti.rt.trend.g[c(24:28)]*uti.case[c(18:22)])-(uti.rt2030st[5]*case_reduc(31, 35)[5])*5
+uti.CASE_SAVE = c(uti.case.diff.2020, uti.case.diff.2025, uti.case.diff.2030)
+data.frame(uti.Intervention.YEAR,uti.CASE_SAVE)
+
+write.xlsx(data.frame(uti.Intervention.YEAR, uti.CASE_SAVE), file = paste0(path, "uti_casesave.xlsx"), append = FALSE)
+```
+
+
+```{r}
+plot((uti.case*uti.rt.trend.g[7:28]), x = c(2019:2040), type = "l", ylim = range(0,10000),main = "Resistance across US from CBP prescription due to Pneumonia", yaxt = "n",ylab = "Resistance per year", xlab = "Year")
+par(new = T)
+plot(c(uti.c.g1, uti.c.2020, uti.c.2020.1), x = c(2019:2040), type = "l", ylim = range(0,10000), main = "Resistance across US from CBP prescription due to Pneumonia", xlim = range(2019,2040),ylab = "Resistance per year", yaxt = "n", xlab = "Year", col = "blue", lty = 2)
+par(new = T)
+plot(c(uti.c.g2, uti.c.2025, uti.c.2025.1), x = c(2019:2040), type = "l", ylim = range(0,10000), main = "Resistance across US from CBP prescription due to Pneumonia", ylab = "Resistance per year", yaxt = "n", xlab = "Year", col = "purple", lty = 2)
+par(new = T)
+plot(c(uti.c.g3, uti.c.2030, uti.c.2030.1), x = c(2019:2040), type = "l", ylim = range(0,10000), main = "Resistance across US from CBP prescription due to Pneumonia", ylab = "Resistance per year", yaxt = "n", xlab = "Year", col = "red", lty = 2)
+axis(side=2, at=seq(0, 10000, 1000), hadj=0.8, cex.axis=0.9, las=2)
+legend(2019, 100000, legend = c("without stewardship", "2020", "2025", "2030"), col = c("black", "blue", "purple", "red"), lty = c(1,2,2,2),cex=0.8, text.font=4, bg='lightblue')
+```
+
+##ggplot for resistance
+```{r}
+uti.resis <- data.frame(Year = 2019:2040, y = c(c(uti.c.g1, uti.c.2020, uti.c.2020.1), c(uti.c.g2, uti.c.2025, uti.c.2025.1), c(uti.c.g3, uti.c.2030, uti.c.2030.1), uti.case*uti.rt.trend.g[7:28]), Year.Start = factor(c(rep(2020,22), rep(2025,22), rep(2030,22), rep("baseline", 22))), Stewardship = factor(c(rep("with stewarship", 22*3), rep("without stewarship", 22))))
+
+uti.resis <- ggplot(uti.resis, aes(x=Year, y=y, color=Year.Start)) +
+geom_line(aes(linetype = Stewardship)) + scale_linetype_manual(values=c("dotdash", "solid")) + scale_colour_manual(values=c("blue", "purple", "red", "black"))+ theme(legend.position = "none") +  theme_classic() + ylab("CBP prescription \n per year for UTI") + theme(legend.position ="bottom", axis.text=element_text(size=14), axis.title=element_text(size=14,face="bold")) + ggtitle("UTI") 
+
+uti.resis2 <- uti.resis + theme(plot.title =element_text(size=18, face="bold", hjust = 0.5), legend.position ="none")
+
+```
+
+
+
+
+```{r}
+uti.cbp.in.prescrip = ceiling(uti*uti.pa*pop$Population[c(-1,-2)]*in.cbp*cbp.uti)
+
+#inappropriate CBP prescription
+incase_reduc <- function(start, end){
+  for (i in 1:5)
+  case[i] <- (1-(0.517/5)*i)*uti.cbp.in.prescrip[i+start-20]
+  return(case)
+}
+uti.red2020 = incase_reduc(21,25)
+uti.red2020.1 = rep(uti.red2020[5],15)
+uti.red2025 = incase_reduc(26,30)
+uti.red2025.1 = rep(uti.red2025[5],10)
+uti.red2030 = incase_reduc(31,35)
+uti.red2030.1 = rep(uti.red2030[5],5)
+```
+
+
+```{r}
+plot(y = cbp.in.prescrip[3:24], x = c(2019:2040), ylim = range(0,red2020,cbp.in.prescrip),type = "l", main = "Inappropriate CBP prescription projection across US", yaxt = "n", ylab = "Inappropriate CBP prescirption per year", xlab = "Year")
+par(new = T)
+plot(y = c(cbp.in.prescrip[3:4], red2020, red2020.1), x = c(2019:2040), ylim = range(0,red2020,cbp.in.prescrip),type = "l", col = "blue", main = "Inappropriate CBP prescription projection across US", yaxt = "n", ylab = "Inappropriate CBP prescirption per year", xlab = "Year", lty = 2)
+par(new = T)
+plot(y = c(cbp.in.prescrip[3:9], red2025, red2025.1), x = c(2019:2040), ylim = range(0,red2020,cbp.in.prescrip),type = "l", col = "purple", main = "Inappropriate CBP prescription projection across US", yaxt = "n", ylab = "Inappropriate CBP prescirption per year", xlab = "Year", lty = 2)
+par(new = T)
+plot(y = c(cbp.in.prescrip[3:14], red2030, red2030.1), x = c(2019:2040), ylim = range(0,red2020,cbp.in.prescrip),type = "l", col = "red", main = "Inappropriate CBP prescription projection across US", yaxt = "n", ylab = "Inappropriate CBP prescirption per year", xlab = "Year", lty = 2)
+axis(side=2, hadj=0.8, cex.axis=0.9, las=2)
+legend(2020, 5000, legend = c("no stewardship", "2020", "2025", "2030"), col = c("black", "blue", "purple", "red"), lty = c(1,2,2,2),cex=0.8, text.font=4, bg='lightblue')
+```
+
+##Inappropriate CBP Prescirption
+```{r}
+p.uti <- data.frame(Year = rep(2019:2040,4), y = c(c(uti.cbp.in.prescrip[3:4], uti.red2020, uti.red2020.1), c(uti.cbp.in.prescrip[3:9], uti.red2025, uti.red2025.1),c(uti.cbp.in.prescrip[3:14], uti.red2030, uti.red2030.1), uti.cbp.in.prescrip[3:24]), Year.Start = factor(c(rep(2020,22), rep(2025,22), rep(2030,22), rep("baseline", 22))), Stewardship = factor(c(rep("with stewarship", 22*3), rep("without stewarship", 22))), u = rep(uti.cbp.in.prescrip[3:24], 4))
+
+uti1 <- subset(p.uti,Year.Start == "2020")
+uti2 <- subset(p.uti,Year.Start == "2025")
+uti3 <- subset(p.uti,Year.Start == "2030")
+
+p.uti.pres <- ggplot(p.uti, aes(x=Year, y=y, color=Year.Start)) +
+geom_line(aes(linetype = Stewardship)) + scale_linetype_manual(values=c("dotdash", "solid")) + scale_colour_manual(values=c("blue", "purple", "red", "black"))+ theme(legend.position = "none") +  theme_classic() + ylab("Inappropriate CBP prescirption \n per year") + theme(legend.position ="bottom", axis.text=element_text(size=14), axis.title=element_text(size=14,face="bold")) + ggtitle("UTI") +scale_y_continuous(limits=c(0, 1100)) + geom_ribbon(data=uti1, aes(ymin =y, ymax =u), alpha = 0.2, fill = "blue", colour = NA) + geom_ribbon(data = uti2, aes(ymin =y, ymax =u), alpha = 0.2, fill = "purple", colour = NA) + geom_ribbon(data = uti3, aes(ymin =y, ymax =u), alpha = 0.2, fill = "red", colour = NA)
+
+
+p.uti.pres2 <- p.uti.pres + theme(plot.title =element_text(size=18, face="bold", hjust = 0.5), legend.position ="none")
+
+legend.resis <- get_legend(p.uti.pres + theme(legend.title=element_text(size=14, face = "bold"), 
+    legend.text=element_text(size=12)))
+
+jpeg(file="/Users/yiziyingchen/Desktop/Townsend/P.A./all.cbp.prescrip.jpeg", width=1000, height=800)
+bottom_pres <- cowplot::plot_grid(p.uti.pres2, p.uti.pres2, labels = c('B', 'C'), align = 'h', rel_widths = c(1, 1),label_size = 16)
+cowplot::plot_grid(p.uti.pres2, bottom_pres, labels = c('A', ''), ncol = 1, rel_heights = c(2.5, 2,1), label_size = 16, legend.resis)
+```
+
+
+##in/appropriate prescription
+```{r}
+uti.resis1 <- data.frame(Year = 2019:2040, y = c(c(uti.c.g1,uti.c.2020, uti.c.2020.1), uti.case*uti.rt.trend.g[7:28]), Stewardship = factor(c(rep(2020,22), rep("status quo", 22))), start.year = factor(c(rep("with stewarship", 22), rep("without stewarship", 22))), u = NA, type = rep("overall prescription", 22))
+
+p.uti1 <- data.frame(Year = 2019:2040, y = c(c(uti.cbp.in.prescrip[3:4], uti.red2020, uti.red2020.1), uti.cbp.in.prescrip[3:24]), Stewardship = factor(c(rep(2020,22),  rep("status quo", 22))), start.year = factor(c(rep("with stewarship", 22), rep("without stewarship", 22))), u = rep(uti.cbp.in.prescrip[3:24],2), type = rep("inappropriate prescription", 22))
+
+uti.uti1 <- subset(p.uti1,Stewardship == "2020")
+
+uti.prescrip_in1 <- ggplot() + geom_line(uti.resis1, mapping = aes(x=Year, y=y, color=Stewardship, linetype = Stewardship))+ geom_line(p.uti1, mapping = aes(x=Year, y=y, color=Stewardship, linetype = Stewardship)) + scale_linetype_manual(values=c("dotdash", "solid")) + scale_color_manual(values=c("purple", "black"))+ scale_fill_manual(name="Prescription Type",values= c("inappriopriate prescription" = "lightblue")) +  theme_classic() + ylab("CBP prescription \n per year for UTI") + ggtitle("UTI") + scale_y_continuous(limits=c(0, 10000)) + geom_ribbon(data=uti.uti1, aes(x = Year, ymin =y, ymax =u), alpha = 0.2, fill = "blue", colour = NA)+ theme(plot.title =element_text(size=18, face="bold", hjust = 0.5), legend.position ="none")
+
+
+
+uti.resis2 <- data.frame(Year = 2019:2040, y = c(c(uti.c.g2, uti.c.2025, uti.c.2025.1),uti.case*uti.rt.trend.g[7:28]), Year.Start = factor(c(rep(2025,22), rep("status quo", 22))), Stewardship = factor(c(rep("with stewarship", 22), rep("without stewarship", 22))), u = NA,type = rep("overall prescription", 22))
+
+p.uti2 <- data.frame(Year = 2019:2040, y = c(c(uti.cbp.in.prescrip[3:9], uti.red2025, uti.red2025.1), uti.cbp.in.prescrip[3:24]), Year.Start = factor(c( rep(2025,22), rep("status quo", 22))), Stewardship = factor(c(rep("with stewarship", 22), rep("without stewarship", 22))),u = rep(uti.cbp.in.prescrip[3:24],2), type = rep("inappropriate prescription", 22))
+
+uti.uti2 <- subset(p.uti2,Year.Start == "2025")
+
+uti.prescrip_in2 <- ggplot() + geom_line(uti.resis2, mapping = aes(x=Year, y=y, color=Year.Start, linetype = Stewardship))+ geom_line(p.uti2, mapping = aes(x=Year, y=y, color=Year.Start, linetype = Stewardship)) + scale_linetype_manual(values=c("dotdash", "solid")) + scale_colour_manual(values=c("purple", "black"))+ theme_classic() + ylab("CBP prescription \n per year for UTI") + ggtitle("UTI") + scale_y_continuous(limits=c(0, 10000)) + geom_ribbon(data=uti.uti2, aes(x = Year, ymin =y, ymax =u), alpha = 0.2, fill = "purple", colour = NA)+ theme(plot.title =element_text(size=18, face="bold", hjust = 0.5), legend.position ="none")
+
+
+
+uti.resis3 <- data.frame(Year = 2019:2040, y = c(c(uti.c.g3, uti.c.2030, uti.c.2030.1),uti.case*uti.rt.trend.g[7:28]), Year.Start = factor(c(rep(2030,22), rep("status quo", 22))), Stewardship = factor(c(rep("with stewarship", 22), rep("without stewarship", 22))), u = NA,type = rep("overall prescription", 22))
+
+p.uti3 <- data.frame(Year = rep(2019:2040,2), y = c(c(uti.cbp.in.prescrip[3:14], uti.red2030, uti.red2030.1), uti.cbp.in.prescrip[3:24]), Year.Start = factor(c(rep(2030,22), rep("status quo", 22))), Stewardship = factor(c(rep("with stewarship", 22), rep("without stewarship", 22))), u = rep(uti.cbp.in.prescrip[3:24],2), type = rep("inappropriate prescription", 22))
+
+uti.uti3 <- subset(p.uti3,Year.Start == "2030")
+
+uti.prescrip_in3 <- ggplot() + geom_line(uti.resis3, mapping = aes(x=Year, y=y, color=Stewardship, linetype = Stewardship))+ geom_line(p.uti3, mapping = aes(x=Year, y=y, color=Stewardship, linetype = Stewardship)) + scale_linetype_manual(values=c("dotdash", "solid")) + scale_color_manual(values=c("red", "black"))+ scale_fill_manual(name="Prescription Type",values= c("inappriopriate prescription" = "lightblue")) +  theme_classic() + ylab("CBP prescription \n per year for UTI")  + ggtitle("UTI") + scale_y_continuous(limits=c(0, 10000)) + geom_ribbon(data=uti.uti3, aes(x = Year, ymin =y, ymax =u), alpha = 0.2, fill = "red", colour = NA)+ theme(plot.title =element_text(size=18, face="bold", hjust = 0.5), legend.position ="none")
+```
