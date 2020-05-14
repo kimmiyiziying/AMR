@@ -1,0 +1,473 @@
+---
+title: "Bac-AB2"
+author: "Yiziying Chen"
+date: "2/19/2019"
+output: html_document
+---
+
+```{r warning=FALSE}
+library(stats4)
+setwd( "/Users/yiziyingchen/Desktop/Townsend/Bac Resist-freq")
+library("readxl")
+bac.AB =  read_excel("Bac1.xlsx", sheet = 2)
+bac.AB$iso = bac.AB$Isolates_AB
+bac.AB$resis = bac.AB$Resistance_AB
+bac.AB$freq = bac.AB$resis/bac.AB$iso
+
+t = seq(0,12,1)
+
+d1 = c()
+d2 = c()
+c3 = c()
+d4 = c()
+d5 = c()
+bac.d.mean = c()
+bac.theta.m <- c()
+set.seed(111)
+for (i in 1:1000){
+  d1 <- rnorm(18, 0.989, 0.006)
+  d2 <- rnorm(18, 0.964, 0.008)
+  d3 <- rnorm(18, 0.974, 0.013)
+  d4 <- rnorm(18, 0.985, 0.005)
+  d5 <- rnorm(18, 0.982, 0.007)
+ bac.d.mean <- (d1+d2+d3+d4+d5)/5
+  bac.theta.m <- c(bac.theta.m, bac.d.mean)
+}
+bac.ab.theta <- mean(bac.theta.m)
+
+bac.ab.k <- bac.AB$resis
+bac.ab.n <- bac.AB$iso
+bac.at <- sum(bac.AB$consump)/13
+bac.ab.at <- rep(bac.at, 13)
+```
+
+
+```{r eval = FALSE}
+#use optim
+ll <- function(param){
+  r0 = param[1]
+  rho = param[2]
+  R <- dbinom(bac.ab.k, bac.ab.n, exp((rho*bac.AB$consump+bac.ab.theta -1)*t)/(1/r0-1+exp((rho*bac.AB$consump + bac.ab.theta-1)*t)))
+  -sum(log(R))
+}
+bac.ab.rho = optim(par = c(bac.AB$freq[1],0), ll)$par[2]
+
+bac.ab.r0 = optim(par = c(bac.AB$freq[1],0), ll)$par[1]
+bac.ab.rt <- exp((bac.ab.rho*bac.AB$consump+ bac.ab.theta -1)*t)/(1/bac.ab.r0-1+exp((bac.ab.rho*bac.AB$consump +  bac.ab.theta-1)*t))
+cbind(bac.ab.rho, bac.ab.r0)
+plot(bac.ab.rt,  ylab = "r(t)", main = "Fitted r(t)-Bacteremia.AB",x = c(2000:2012),type = "l")
+data.frame(bac.ab.rt, bac.AB$freq)
+```
+
+```{r}
+bac.consump <- lm(consump ~ t, data = bac.AB)
+#2013 to 2019 projection
+t1 <- seq(13,20,1)
+bac.consump.trend1 <- sapply(t1, function(i) (summary(bac.consump)$coefficients[1] + i*summary(bac.consump)$coefficients[2]))
+bac.m.trend1 <- bac.ab.rho*bac.consump.trend1 + bac.ab.theta -1
+bac.rt.trend1 <- exp(bac.m.trend1*t1) / (1/bac.ab.r0 -1 + exp(bac.m.trend1*t1))
+
+#2020 to 2024 projection
+t2 <- seq(21,25,1)
+bac.consump.trend2 <- sapply(t2, function(i) (summary(bac.consump)$coefficients[1] + i*summary(bac.consump)$coefficients[2]))
+bac.m.trend2 <- bac.ab.rho*bac.consump.trend2 + bac.ab.theta-1
+  ##without stewarship
+  bac.rt.trend2 <- exp(bac.m.trend2*t2) / (1/bac.ab.r0 -1 + exp(bac.m.trend2*t2))
+  ##with stewarship
+  bac.t2.1 <- c()
+  bac.c.trend2.1 <- c()
+  bac.rt.trend2.1 <- c()
+  bac.rt.t2.1<- c()
+  for (i in 1:5){
+    bac.t2.1[i] <- (1-(0.52/5)*i)*bac.consump.trend2[1]
+    bac.c.trend2.1 <- c(bac.c.trend2.1, bac.t2.1[i])
+}
+    bac.m.trend2.1 <- bac.ab.rho*bac.c.trend2.1 + bac.ab.theta -1
+    bac.rt.trend2.1 <- exp(bac.m.trend2.1*t2) / (1/bac.ab.r0 -1 + exp(bac.m.trend2.1*t2))
+
+t2.1<- seq(1,15,1)
+bac.consump.trend2.1.1 <-summary(bac.consump)$coefficients[2]*t2.1 + bac.c.trend2.1[5]
+bac.m.trend2.1.1 <-  bac.ab.rho*bac.consump.trend2.1.1 + bac.ab.theta -1
+bac.rt.trend2.1.1 <- exp(bac.m.trend2.1.1 * c(26:40)) / (1/bac.ab.r0-1 + exp(bac.m.trend2.1.1*c(26:40)))
+
+
+#2025 to 2030 projection
+t3 <- seq(26,30,1)
+bac.consump.trend3 <- sapply(t3, function(i) (summary(bac.consump)$coefficients[1] + i*summary(bac.consump)$coefficients[2]))
+
+  ##without stewarship
+  bac.m.trend3 <- bac.ab.rho* bac.consump.trend3 + bac.ab.theta -1
+  bac.rt.trend3 <- exp(bac.m.trend3*(t3)) / (1/bac.ab.r0 -1 + exp(bac.m.trend3*t3))
+  ##with stewarship
+  bac.t3.1 <- c()
+  bac.c.trend3.1 <- c()
+  bac.rt.trend3.1 <- c()
+  bac.rt.t3.1 <- c()
+  for (i in 1:5){
+    bac.t3.1[i] <- (1-(0.52/5)*i)*bac.consump.trend3[1]
+    bac.c.trend3.1 <- c(bac.c.trend3.1, bac.t3.1[i])
+}
+  bac.m.trend3.1 <- bac.ab.rho*bac.c.trend3.1 + bac.ab.theta -1 
+  bac.rt.trend3.1 <- exp(bac.m.trend3.1*t3) / (1/bac.ab.r0 -1 + exp(bac.m.trend3.1*t3))
+  
+t3.1<- seq(1,10,1)
+bac.consump.trend3.1.1 <-summary(bac.consump)$coefficients[2]*t3.1 + bac.c.trend3.1[5]
+bac.m.trend3.1.1 <- bac.ab.rho*bac.consump.trend3.1.1 + bac.ab.theta -1
+bac.rt.trend3.1.1 <- exp(bac.m.trend3.1.1 * c(31:40)) / (1/ bac.ab.r0-1 + exp(bac.m.trend3.1.1*c(31:40)))
+
+#2035 to 2040 projection
+t4 <- seq(31,35,1)
+bac.consump.trend4 <- sapply(t4, function(i) (summary(bac.consump)$coefficients[1] + i*summary(bac.consump)$coefficients[2]))
+  ##without stwership
+  bac.m.trend4 <- bac.ab.rho*bac.consump.trend4 + bac.ab.theta -1
+  bac.rt.trend4 <- exp(bac.m.trend4*t4) / (1/bac.ab.r0 -1 + exp(bac.m.trend4*t4))
+  ##with stwership 
+  bac.t4.1 <- c()
+  bac.c.trend4.1 <- c()
+for (i in 1:5){
+  bac.t4.1[i] <- (1-(0.52/5)*i)*bac.consump.trend4[1]
+  bac.c.trend4.1 <- c(bac.c.trend4.1, bac.t4.1[i])
+}
+  bac.m.trend4.1 <- bac.ab.rho*bac.c.trend4.1 + bac.ab.theta -1
+  bac.rt.trend4.1 <- exp(bac.m.trend4.1*t4) / (1/bac.ab.r0 -1 + exp(bac.m.trend4.1*t4))
+
+t4.1<- seq(1,5,1)
+bac.consump.trend4.1.1 <-summary(bac.consump)$coefficients[2]*t4.1 + bac.c.trend4.1[5]
+bac.m.trend4.1.1 <- bac.ab.rho*bac.consump.trend4.1.1 + bac.ab.theta -1
+bac.rt.trend4.1.1 <- exp(bac.m.trend4.1.1 * c(36:40)) / (1/bac.ab.r0-1 + exp(bac.m.trend4.1.1*c(36:40)))  
+  
+#general without stewardship
+t.g<- seq(13,40,1)
+bac.consump.trend.g<-sapply(t.g, function(i) (summary(bac.consump)$coefficients[1] + i*summary(bac.consump)$coefficients[2]))
+bac.m.trend.g <- bac.ab.rho*bac.consump.trend.g + bac.ab.theta -1
+bac.rt.trend.g <- exp(bac.m.trend.g*t.g) / (1/bac.ab.r0 -1 + exp(bac.m.trend.g*t.g))
+
+```
+
+```{r}
+#plot overlay resisatnce frequency with/out intervension
+plot(2000:2040, ylim = c(min(bac.AB$freq), max(bac.rt.trend.g)),y = c(bac.AB$freq, bac.rt.trend1, bac.rt.trend2.1, rep(min(bac.rt.trend2.1),15)), type = "l", xlab = "Year", ylab = "Resistance Frequency",main = "Projected Resistance Frequency with/out Bacteria Stewardship", col = "blue", lty = 2)
+par(new = T)
+plot(2000:2040, ylim = c(min(bac.AB$freq), max(bac.rt.trend.g)),y = c(bac.AB$freq, bac.rt.trend1, bac.rt.trend2, bac.rt.trend3.1, rep(min(bac.rt.trend3.1),10)), type = "l", xlab = "Year", ylab = "Resistance Frequency",main = "Projected Resistance Frequency with/out Bacteria Stewardship", col = "purple", lty = 2)
+par(new = T)
+plot(2000:2040, ylim = c(min(bac.AB$freq), max(bac.rt.trend.g)),y = c(bac.AB$freq, bac.rt.trend1, bac.rt.trend2, bac.rt.trend3, bac.rt.trend4.1, rep(min(bac.rt.trend4.1),5)), type = "l", xlab = "Year", ylab = "Resistance Frequency",main = "Projected Resistance Frequency with/out Bacteria Stewardship", col = "red", lty = 2)
+par(new = T)
+plot(2000:2040, ylim = c(min(bac.AB$freq), max(bac.rt.trend.g)),y = c(bac.AB$freq,bac.rt.trend.g), type = "l", xlab = "Year", ylab = "Resistance Frequency",main = "Projected Resistance Frequency with/out Bacteria Stewardship")
+#text(c(2000:2040), c(ab.rt,rt.trend.g), round(c(ab.rt,rt.trend.g),2),cex=0.75, col = "dark orange")
+
+legend(2000, 1, legend = c("without stewardship", "2020", "2025", "2030"), col = c("black", "blue", "purple", "red"), lty = c(1,2,2,2),cex=0.8, text.font=4, bg='lightblue')
+```
+
+
+```{r}
+#Resistance frequency compare
+library(scales)
+bac.rt.compare <- function(x1, x2) percent(((max(x1) - min(x2)) / min(x2)))
+#2020 intervention
+bac.inter1 <- bac.rt.compare(bac.rt.trend2, bac.rt.trend2.1)
+#2025 intervention
+bac.inter2 <- bac.rt.compare(bac.rt.trend3, bac.rt.trend3.1)
+#2030 intervention
+bac.inter3 <- bac.rt.compare(bac.rt.trend4, bac.rt.trend4.1)
+intervention <- c(2020,2025,2030)
+#5-year RF change percentage with intervention
+RF_diff <- c(bac.inter1, bac.inter2, bac.inter3)
+#5-year end point RF
+END_RF = c(min(bac.rt.trend2.1), min(bac.rt.trend3.1), min(bac.rt.trend4.1))
+
+data.frame(intervention, RF_diff)
+data.frame(intervention, END_RF)
+```
+
+#resistance case difference-CROSS US
+```{r}
+pop = read_excel("population.xlsx", sheet = 1)
+bac.ab = bac.AB$`Bac-AB`[13]
+cbp.bac = mean(bac.AB$`CBP-Bac`)
+#ratio of bac contributed by PA should not be decreasing; take the last time point
+in.cbp = 0.136736215
+bac = 2.157
+#bac.pa =c()
+#p1 = c()
+#for(i in 15:40){
+  #p1 = summary(m1)$coefficient[1] + summary(m1)$coefficient[2]*i
+  #bac.pa = c(bac.pa,p1)
+#}
+
+#bac.pa
+
+case = c()
+cn = c()
+for(i in 19:40){
+  cn = bac.ab*cbp.bac*pop$Population[(i-14)]*bac
+  case = c(case,cn)
+}
+
+c25 = bac.rt.trend.g[9]*case[9]
+c25.1 = bac.rt.trend2.1[5]*case[9]
+int.2020 = c25 - c25.1
+c30 = bac.rt.trend.g[14]*case[14]
+c30.1 = bac.rt.trend3.1[5]*case[14]
+int.2025 = c30 - c30.1
+c35 = bac.rt.trend.g[19]*case[19]
+c35.1 = bac.rt.trend4.1[5]*case[19]
+int.2030 = c35 - c35.1
+CASE.diff = c(ceiling(int.2020), ceiling(int.2025), ceiling(int.2030))
+YEAR = c(2020,2025,2030)
+
+#5-year end point resistance cases number across US
+END.CASE <- ceiling(c(c25.1, c30.1, c35.1))
+NO.STEWARD = c(c25, c30, c35)
+#5-year isolate case number change under intervention in US
+data.frame(YEAR,  NO.STEWARD, END.CASE, CASE.diff)
+```
+
+#plot resistance cases across US
+```{r}
+reduc = c()
+for(i in 1:5)(reduc[i] = 1-(0.52/5)*i)
+c.g1 <- case[1:2]*bac.rt.trend.g[7:8]
+c.g2 <- case[1:7]*bac.rt.trend.g[7:13]
+c.g3 <- case[1:12]*bac.rt.trend.g[7:18]
+c.2020 <- reduc*case[3:7]*bac.rt.trend2.1
+c.2020.1<- rep(c.2020[5],15)
+c.2025 <- reduc*case[8:12]*bac.rt.trend3.1
+c.2025.1<- rep(c.2025[5],10)
+c.2030 <- reduc*case[13:17]*bac.rt.trend4.1
+c.2030.1<- rep(c.2030[5],5)
+
+
+plot((case*bac.rt.trend.g[7:28]), x = c(2019:2040), type = "l", ylim = range(0,2000000),main = "Resistance across US from CBP prescription due to Pneumonia", yaxt = "n",ylab = "Resistance per year", xlab = "Year")
+par(new = T)
+plot(c(c.g1,c.2020, c.2020.1), x = c(2019:2040), type = "l", ylim = range(0,2000000), main = "Resistance across US from CBP prescription due to Pneumonia", xlim = range(2019,2040),ylab = "Resistance per year", yaxt = "n", xlab = "Year", col = "blue", lty = 2)
+par(new = T)
+plot(c(c.g2, c.2025, c.2025.1), x = c(2019:2040), type = "l", ylim = range(0,2000000), main = "Resistance across US from CBP prescription due to Pneumonia", ylab = "Resistance per year", yaxt = "n", xlab = "Year", col = "purple", lty = 2)
+par(new = T)
+plot(c(c.g3, c.2030, c.2030.1), x = c(2019:2040), type = "l", ylim = range(0,2000000), main = "Resistance across US from CBP prescription due to Pneumonia", ylab = "Resistance per year", yaxt = "n", xlab = "Year", col = "red", lty = 2)
+axis(side=2, at=c(0, 500000, 1000000, 1500000, 2000000), labels=expression(0, 5%*%10^5, 1%*%10^6, 1.5%*%10^6,  2%*%10^6),hadj=0.8, cex.axis=0.9, las=2)
+legend(2019, 500000, legend = c("without stewardship", "2020", "2025", "2030"), col = c("black", "blue", "purple", "red"), lty = c(1,2,2,2),cex=0.8, text.font=4, bg='lightblue')
+
+```
+
+#calculate total saved case number
+```{r}
+Intervention.YEAR = c(2020,2025,2030)
+case.diff.2020 = sum(bac.rt.trend.g[c(9:13)]*case[c(2:6)] - c.2020) + sum(bac.rt.trend.g[c(14:28)]*case[c(8:22)]-c.2020.1)
+case.diff.2025 = sum(bac.rt.trend.g[c(14:18)]*case[c(7:11)] - c.2025) + sum(bac.rt.trend.g[c(19:28)]*case[c(13:22)]-c.2025.1)
+case.diff.2030 = sum(bac.rt.trend.g[c(19:23)]*case[c(12:16)] - c.2030) + sum(bac.rt.trend.g[c(24:28)]*case[c(18:22)]-c.2030.1)
+CASE_SAVE = c(case.diff.2020, case.diff.2025, case.diff.2030)
+data.frame(Intervention.YEAR,CASE_SAVE)
+```
+
+```{r}
+cbp.in.prescrip = ceiling(bac*bac.ab*pop$Population[c(-1,-2)]*in.cbp*cbp.bac)
+
+#inappropriate CBP prescription
+
+  
+red2020 = reduc*cbp.in.prescrip[4:8]
+red2020.1 = rep(red2020[5],15)
+red2025 = reduc*cbp.in.prescrip[9:13]
+red2025.1 = rep(red2025[5],10)
+red2030 = reduc*cbp.in.prescrip[14:18]
+red2030.1 = rep(red2030[5],5)
+
+
+plot(y = cbp.in.prescrip[3:24], x = c(2019:2040), ylim = range(0,red2020,cbp.in.prescrip),type = "l", main = "Inappropriate CBP prescription projection across US", ylab = "Inappropriate CBP prescirption per year", yaxt = "n", xlab = "Year")
+
+par(new = T)
+plot(y = c(cbp.in.prescrip[3:4], red2020, red2020.1), x = c(2019:2040), ylim = range(0,red2020,cbp.in.prescrip),type = "l", col = "blue", main = "Inappropriate CBP prescription projection across US", ylab = "Inappropriate CBP prescirption per year", yaxt = "n", xlab = "Year", lty = 2)
+par(new = T)
+plot(y = c(cbp.in.prescrip[3:9], red2025, red2025.1), x = c(2019:2040), ylim = range(0,red2020,cbp.in.prescrip),type = "l", col = "purple", main = "Inappropriate CBP prescription projection across US", ylab = "Inappropriate CBP prescirption per year", yaxt = "n", xlab = "Year", lty = 2)
+par(new = T)
+plot(y = c(cbp.in.prescrip[3:14], red2030, red2030.1), x = c(2019:2040), ylim = range(0,red2020,cbp.in.prescrip),type = "l", col = "red", main = "Inappropriate CBP prescription projection across US", ylab = "Inappropriate CBP prescirption per year", yaxt = "n", xlab = "Year", lty = 2)
+axis(side=2, at=c(0, 50000,100000, 150000, 200000, 250000), labels=expression(0, 5%*%10^4, 1.0%*%10^5, 1.5%*%10^5, 2.0%*%10^5, 2.5%*%10^5),hadj=0.8, cex.axis=0.8, las=2)
+legend(2020, 50000, legend = c("no stewardship", "2020", "2025", "2030"), col = c("black", "blue", "purple", "red"), lty = c(1,2,2,2),cex=0.8, text.font=4, bg='lightblue')
+```
+```{r}
+mean.rt = mean(bac.AB$freq)
+sd.rt = sd(bac.AB$freq)
+l.ci = c(bac.AB$freq - 1.96*sd.rt/sqrt(17), bac.rt.trend.g- 1.96*sd.rt/sqrt(17))
+u.ci = c(bac.AB$freq - 1.96*sd.rt/sqrt(17), bac.rt.trend.g + 1.96*sd.rt/sqrt(17))
+ci = data.frame(l.ci, u.ci)
+rt1 <- data.frame(rt = c(bac.ab.rt), year = c(2000:2040))
+library(ggplot2)
+ggplot(rt1, aes(x=year, y=rt)) + geom_line()+ geom_ribbon(aes(ymin=l.ci,ymax=u.ci),alpha=0.3)
+  
+#geom_smooth(method="loess")
+```
+
+```{r}
+set.seed(12345)
+  L<-function(param, consump) {
+  r0 = param[1]
+  rho = param[2]
+  R <- dbinom(bac.ab.k, bac.ab.n, exp((rho*consump+bac.ab.theta -1)*(0:12))/(1/r0-1+exp((rho*consump + bac.ab.theta-1)*(0:12))), log = T)
+  sum(R)
+}
+
+
+ll.CI <- function(consump, ti){
+
+r0.val <- function(x){return(L(c(x, bac.ab.rho), bac.AB$consump))}
+mcmc.r0 <- rnorm(1000, bac.ab.r0,0.01)
+r0.LL <- sapply(mcmc.r0, r0.val)
+
+
+r0ci <- as.vector(quantile(r0.LL, c(0.025, 0.975)))
+
+r0.l <- mcmc.r0[which.min(abs(r0.LL - r0ci[1]))]
+r0.u <- mcmc.r0[which.min(abs(r0.LL - r0ci[2]))]
+
+
+rho.val <- function(x){return(L(c(bac.ab.r0, x), bac.AB$consump))}
+mcmc.rho <- rnorm(1000,bac.ab.rho,0.01)
+rho.LL <- sapply(mcmc.rho, rho.val)
+
+
+rhoci <- as.vector(quantile(rho.LL, c(0.025, 0.975)))
+
+rho.l <- mcmc.rho[which.min(abs(rho.LL - rhoci[1]))]
+rho.u <- mcmc.rho[which.min(abs(rho.LL - rhoci[2]))]
+rt.l <- exp((rho.l*consump+bac.ab.theta -1)*ti)/(1/r0.l-1+exp((rho.l*consump + bac.ab.theta-1)*ti))
+rt.u <- exp((rho.u*consump+bac.ab.theta -1)*ti)/(1/r0.u-1+exp((rho.u*consump + bac.ab.theta-1)*ti))
+return(list(rt.l, rt.u))
+#return(c(rt.l, rt.u))
+}
+
+
+
+(rt.u2 = unlist(ll.CI(bac.consump.trend.g, 13)[1]))
+(rt.l2 = unlist(ll.CI(bac.consump.trend.g, 13)[2]))
+
+#rt.l1 <- bac.AB$freq - sqrt(bac.AB$freq*(1-bac.AB$freq)/bac.AB$iso)
+#rt.u1 <- bac.AB$freq + sqrt(bac.AB$freq*(1-bac.AB$freq)/bac.AB$iso)
+```
+
+```{r}
+plot(2000:2012, ylim = c(min(bac.AB$freq), max(rt.trend.g)), xlim = range(2000:2040),y = bac.AB$freq, xlab = "Year", ylab = "Resistance Frequency",main = "Projected Resistance Frequency with/out Bacteria Stewardship", pch = 19, type = 'o', cex = 0.3)
+lines(2012:2040, c(rt.l1[13],rt.l2), lty = 'dashed', col = 'red')
+lines(2012:2040, c(rt.u1[13],rt.u2), lty = 'dashed', col = 'red')
+polygon(c(2012:2040,rev(2012:2040)), c(c(rt.l1[13],rt.l2), rev(c(rt.u1[13],rt.u2))), col = 'grey80', border = NA)
+par(new = T)
+plot(2000:2040, ylim = c(min(bac.AB$freq), max(rt.trend.g)),y = c(bac.AB$freq,rt.trend.g), type = "l", xlab = "Year", ylab = "Resistance Frequency",main = "Projected Resistance Frequency with/out Bacteria Stewardship")
+arrows(2000:2012, rt.l1, 2000:2012, rt.u1, length = 0.03, angle = 90, code = 3, col = "darkorange", pch = 5, cex = 3)
+```
+
+
+
+```{r}
+set.seed(11111)
+
+#Vectorize(crossing(seq(0.1, 0.2, 0.001) , seq(0, 0.01, 0.0001)))
+#which.max(mapply(r0 = val[,1], rho=val[,2], L))
+
+val <- as.matrix(tidyr::crossing(r0 = seq(0.1, 0.2, 0.001), rho = seq(0, 0.01, 0.0001)))
+
+bac.ab.r0
+bac.ab.rho
+w <- c()
+lik <- c()
+
+for(i in 1:nrow(val)){
+  lik[i] <- mapply(r0=val[i,1], rho=val[i,2], L)
+}
+
+weight <- c()
+for(i in 1:nrow(val)){
+  weight[i] <- lik[i]/sum(lik)
+}
+
+#which(mm == max(mm), arr.ind = TRUE)
+pst <- matrix(NA, nrow = 1000, ncol = 3)
+param <- cbind(val, weight)
+i = 1
+while (i <= 1000) {
+  k <- sample(1:nrow(param),1)
+  rand <- runif(1, 0,0.1)
+  if(rand < param[k, 3]){
+    pst[i,] <- param[k, ]
+    i = i+1
+  }
+}
+
+post <- pst[order(pst[,3]),]
+
+#r0 and rho CI
+r0.l <- post[250,1]
+r0.u <- post[750,1]
+rho.l<- post[250,2]
+rho.u<- post[750,2]
+post[250,]
+
+m.tr.l <- rho.l*c(consump.trend.g) + bac.ab.theta -1
+m.tr.u <- rho.u*c(consump.trend.g) + bac.ab.theta -1
+
+rt.u <- exp((rho.l*c(consump.trend.g) + bac.ab.theta -1)*c(13:40)) / (1/r0.l -1 + exp((rho.l*c(consump.trend.g) + bac.ab.theta -1)*c(13:40)))
+rt.l <- exp((rho.u*c(consump.trend.g) + bac.ab.theta -1)*c(13:40)) / (1/r0.u -1 + exp((rho.u*c(consump.trend.g) + bac.ab.theta -1)*c(13:40)))
+
+#0:12 CI
+rt.l1 <- bac.AB$freq - sqrt(bac.AB$freq*(1-bac.ABfreq)/bac.AB$iso)
+rt.u1 <- bac.AB$freq + sqrt(bac.AB$freq*(1-bac.AB$freq)/bac.AB$iso)
+
+
+plot(2000:2012, ylim = c(min(bac.AB$freq), max(rt.trend.g)), xlim = range(2000:2040),y = bac.AB$freq, xlab = "Year", ylab = "Resistance Frequency",main = "Projected Resistance Frequency with/out Bacteria Stewardship", pch = 19, type = 'o', cex = 0.3)
+lines(2012:2040, c(rt.l1[13],rt.l), lty = 'dashed', col = 'red')
+lines(2012:2040, c(rt.u1[13],rt.u), lty = 'dashed', col = 'red')
+polygon(c(2012:2040,rev(2012:2040)), c(c(rt.l1[13],rt.l), rev(c(rt.u1[13],rt.u))), col = 'grey80', border = NA)
+par(new = T)
+plot(2000:2040, ylim = c(min(bac.AB$freq), max(rt.trend.g)),y = c(bac.AB$freq,rt.trend.g), type = "l", xlab = "Year", ylab = "Resistance Frequency",main = "Projected Resistance Frequency with/out Bacteria Stewardship")
+arrows(2000:2012, rt.l1, 2000:2012, rt.u1, length = 0.03, angle = 90, code = 3, col = "darkorange", pch = 5, cex = 3)
+```
+
+
+#MCMC for CI
+```{r}
+ll <- function(param){
+  r0 = param[1]
+  rho = param[2]
+  #-sum(log(dbinom(ab.k, ab.n, exp((rho*PA$consump+ab.theta -1)*t)/(1/r0-1+exp((rho*PA$consump + ab.theta-1)*t)))))
+  R <- dbinom(bac.ab.k, bac.ab.n, exp((rho*bac.AB$consump+bac.ab.theta -1)*t)/(1/r0-1+exp((rho*bac.AB$consump + bac.ab.theta-1)*t)))
+  -sum(log(R))
+}
+
+bac.ab.r0
+bac.ab.rho
+bac.consump = c(bac.AB$consump, bac.consump.trend.g)
+
+calcCI <- function(t){
+  r0 <- rnorm(1, bac.ab.r0, 0.01)
+  rho <- rnorm(1, bac.ab.rho, 0.01)
+  result = matrix()
+  result <- exp((rho*bac.consump[t+1]+bac.ab.theta -1)*t)/(1/r0-1+exp((rho*bac.consump[t+1] + bac.ab.theta-1)*t))
+  return(result)
+}
+
+
+calcCI(3)
+library(pracma)
+  lower = c()
+  upper = c()
+  lw = c()
+  up = c()
+  UCL <- 
+for(t in 0:40){
+
+UCL <- replicate(1000,expr = calcCI(40))
+v = var(UCL)
+x <- calcCI(40)
+upper <- x + 1.96*sqrt(v/1000)
+lower <- x - 1.96*sqrt(v/1000)
+#upper <- bisect(function(r) mean(UCL<r)-0.95,0,1.01)$root
+#lower <- bisect(function(r) mean(UCL<r)-0.05,0,1)$root
+
+lw <- c(lw, lower)
+up <- c(up, upper)
+#mean(UCL<0.996)
+#mean(UCL< 0.095)
+}
+
+lw
+up
+```
+

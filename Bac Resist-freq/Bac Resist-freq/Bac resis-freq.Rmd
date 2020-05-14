@@ -1,0 +1,38 @@
+---
+title: "Bacteremia, PA Resisatance Frequency"
+author: "Yiziying Chen"
+date: "11/29/2018"
+output: html_document
+---
+
+```{r}
+setwd("/Users/yiziyingchen/Desktop/Townsend/Bac Resist-freq")
+library("readxl")
+
+bac1 <- read_excel("bac.xlsx", sheet = 1)
+bac1$PA.resis = bac1$Resistance_PA+ bac1$Resistance_PA_1
+bac1$PA.iso = bac1$`CDDEP Isolates_PA` + bac1$`MERCK Isolates_PA`
+
+bac1$PA.freq = bac1$PA.resis/bac1$PA.iso
+
+fitPA.merge = lm(PA.freq ~ Consumption, data = bac1)
+summary(fitPA.merge)
+bac.pa.rho = summary(fitPA.merge)$coefficients[2]
+bac.pa.theta_1 = summary(fitPA.merge)$coefficients[1]  
+
+bac.pa.k <- bac1$PA.resis
+bac.pa.m <- bac.pa.rho*bac1$Consumption + bac.pa.theta_1
+bac.pa.n <- bac1$PA.iso
+
+logL<-function(r0) sum(dbinom(bac.pa.k,size = bac.pa.n, prob = exp(bac.pa.m)/(1/r0-1+exp(bac.pa.m)),log=T)) 
+estPar<-optimize(logL,c(0,1),maximum=T) 
+bac.pa.r0 <-estPar$maximum
+
+bac.pa.m <- bac.pa.rho*bac1$Consumption + bac.pa.theta_1
+bac.pa.rt <- exp(bac.pa.m) / (1/bac.pa.r0 -1 + exp(bac.pa.m))
+
+plot(bac.pa.rt, x = c(2000:2014))
+do.call(rbind, Map(data.frame, Fitted=bac.pa.rt, Actual=bac1$PA.freq))
+
+```
+
