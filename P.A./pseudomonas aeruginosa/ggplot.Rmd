@@ -1,0 +1,213 @@
+---
+title: "ggplot.AMR"
+author: "Yiziying Chen"
+date: "5/13/2019"
+output: html_document
+---
+
+```{r}
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+legend <- get_legend(p.pneu + theme(legend.position='right', legend.title=element_text(size=14, face = "bold"), 
+    legend.text=element_text(size=12)))
+```
+
+
+##all CI_RT
+```{r}
+
+require(ggpubr)
+legend.ci.rt <- get_legend(p.bac + theme(legend.title=element_text(size=14, face = "bold"), legend.position='bottom',
+    legend.text=element_text(size=12)))
+
+#use ggarrange:
+jpeg(file="/Users/yiziyingchen/Desktop/Townsend/P.A./all.ci.rt.jpeg", width=1000, height=800)
+#ggarrange(ci.pneu, ggarrange(ci.bac, ci.uti, ncol = 2, labels = c("B", "C")), nrow = 2, labels = "A") 
+
+#use cowplot->plot_grid
+bottom_row <- cowplot::plot_grid(p.pneu.plot2, p.uti.plot2, labels = c('B', 'C'), align = 'h', rel_widths = c(1, 1),label_size = 16)
+cowplot::plot_grid(p.bac.plot2, bottom_row, labels = c('A', ''), ncol = 1, rel_heights = c(4.5, 2.5,1),label_size = 16, legend.ci.rt)
+
+```
+
+##all RT
+```{r}
+legend.rt <- get_legend(p.bac.pres + theme(legend.title=element_text(size=14, face = "bold"), 
+    legend.text=element_text(size=12)))
+
+jpeg(file="/Users/yiziyingchen/Desktop/Townsend/P.A./all.rt.jpeg", width=1000, height=800)
+
+#use cowplot->plot_grid
+bottom_row <- cowplot::plot_grid(p.pneu.plot2, p.uti.plot2, labels = c('B', 'C'), align = 'h', rel_widths = c(1, 1),label_size = 16)
+cowplot::plot_grid(p.bac.plot2, bottom_row, labels = c('A', ''), ncol = 1, rel_heights = c(2.5, 2,1),label_size = 16, legend.rt)
+```
+
+##resist and prescrip
+```{r}
+
+in.appropriate.pres <- get_legend(p.bac + theme(legend.title=element_text(size=14, face = "bold"), legend.position='bottom',
+    legend.text=element_text(size=12)))
+
+jpeg(file="/Users/yiziyingchen/Desktop/Townsend/P.A./all.prescript.jpeg", width=1000, height=800)
+
+#use cowplot->plot_grid
+bottom_row = cowplot::plot_grid(bac.prescrip_in1, bac.prescrip_in2, bac.prescrip_in3,
+                                pneu.prescrip_in1,pneu.prescrip_in2,pneu.prescrip_in3,
+                   uti.prescrip_in1, uti.prescrip_in2, uti.prescrip_in3,
+                   labels = c('A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'), ncol = 3, 
+                   rel_widths = c(1, 1, 1),rel_heights = c(3, 3,3),label_size = 14)
+cowplot::plot_grid(bottom_row, in.appropriate.pres, ncol = 1, rel_heights = c(1, .15))
+```
+
+
+
+
+##all RESIST
+```{r}
+legend.resis <- get_legend(p.bac.pres + theme(legend.title=element_text(size=14, face = "bold"), legend.direction = "horizontal", legend.position=c(1,0.8), legend.text=element_text(size=12)))
+
+jpeg(file="/Users/yiziyingchen/Desktop/Townsend/P.A./all.resistcase.jpeg", width=1000, height=1400)
+library(cowplot)
+#use cowplot->plot_grid
+jpeg(file="/Users/yiziyingchen/Desktop/Townsend/P.A./prescri.presistcase.jpeg", width=1000, height=1400)
+cowplot::plot_grid(bac.resis1, p.bac.pres1, bac.resis2, p.bac.pres2, bac.resis3, p.bac.pres3, labels = c('A', 'B', 'C', 'D', 'E', 'F'),  rel_widths = c(1, 1),ncol = 2,  rel_heights = c(2, 2),label_size = 16,legend.resis)
+
+cowplot::plot_grid(bac.resis2, bottom_row, labels = c('A', ''), ncol = 1, rel_heights = c(2.5, 2,1),label_size = 16,legend.resis)
+```
+
+
+##all prescrip
+```{r}
+
+legend.prescrip <- get_legend(p.uti.pres + theme(legend.title=element_text(size=14, face = "bold"), 
+    legend.text=element_text(size=12)))
+jpeg(file="/Users/yiziyingchen/Desktop/Townsend/P.A./all.prescripcase.jpeg", width=1000, height=800)
+
+
+#use cowplot->plot_grid
+bottom_row <- cowplot::plot_grid(p.pneu.pres2, p.uti.pres2, labels = c('B', 'C'), align = 'h', rel_widths = c(1, 1),label_size = 16)
+cowplot::plot_grid(p.bac.pres2, bottom_row, labels = c('A', ''), ncol = 1, rel_heights = c(2.5, 2,1),label_size = 16,legend.prescrip)
+```
+
+
+```{r}
+
+```{r}
+#MCMC 
+uti.fit1 <- lm(log(1/uti.PA$freq -1) ~ c(0:11))
+uti.fit2 <- lm(log(1/uti.rt.trend.g -1) ~ c(12:40))
+
+uti.conf.int <- predict(uti.fit1, interval = "conf", newdata = data.frame(c(0:11)))
+simreg1 <- function(mod = uti.fit1){
+  a = coef(mod)[1]
+  b = coef(mod)[2]
+  rse = summary(mod)$sigma
+  x = c(0:40)
+  y.sim <- rnorm(n = length(x), mean = a+b*x, sd = rse)
+  lm.sim <- lm(y.sim ~ x)
+  coef(lm.sim)
+#pa.m = -b
+#pa.rho = (pa.m-(pa.theta -1))/at
+#pa.r0 = 1/(exp(a)+1)
+
+#pa.rt <- exp((pa.rho*PA$consump+pa.theta-1)*t) / (1/pa.r0 -1 + #exp((pa.rho*PA$consump+pa.theta-1)*t))
+}
+
+uti.rt.all = c()
+for(i in 1:12){
+  uti.rt.sim <- rnorm(n = 1000, mean = uti.PA$freq, sd = summary(uti.fit1)$sigma)
+  uti.rt.sim <- uti.rt.sim[order(uti.rt.sim)]
+  uti.rt.all <- cbind(uti.rt.all, uti.rt.sim)
+  uti.CI.l <- uti.rt.all[250,]
+  uti.CI.u <- uti.rt.all[750,]
+}
+
+uti.rt.l <- as.vector(uti.CI.l)
+uti.rt.u <- as.vector(uti.CI.u)
+
+#MC simulation
+N <- 1000
+uti.simulated.coef <- replicate(N, simreg1())
+uti.simulated.coef <- t(uti.simulated.coef)
+sd(uti.simulated.coef[,1])
+sd(uti.simulated.coef[,2])
+summary(uti.fit1)$coef[,1:2]
+#MCMC CI for the slope
+uti.slop.ci <- quantile(uti.simulated.coef[,2], c(0.025, 0.975))
+#MCMC CI for the intercept
+uti.inter.ci <- quantile(uti.simulated.coef[,1], c(0.025, 0.975))
+#acutal intercept CI
+confint(uti.fit1)[1,]
+#acutal slope CI
+confint(uti.fit1)[2,]
+
+
+#rho CI
+uti.pa.m.l = -uti.slop.ci[2]
+uti.pa.m.u = -uti.slop.ci[1]
+uti.pa.rho.l = (uti.pa.m.l-(uti.pa.theta -1))/uti.at
+uti.pa.rho.u = (uti.pa.m.u-(uti.pa.theta -1))/uti.at
+c(uti.pa.rho.l, uti.pa.rho.u)
+#r0 CI
+uti.inter.ci.l = uti.inter.ci[2]
+uti.inter.ci.u = uti.inter.ci[1]
+uti.pa.r0.l = 1/(exp(uti.inter.ci.l)+1)
+uti.pa.r0.u = 1/(exp(uti.inter.ci.u)+1)
+c(uti.pa.r0.l, uti.pa.r0.u)
+
+uti.m.trend.g.l <- uti.pa.rho.l*c(uti.consump.trend.g) + uti.pa.theta -1
+uti.m.trend.g.u <- uti.pa.rho.u*c(uti.consump.trend.g) + uti.pa.theta -1
+
+uti.rt.trend.g.l <- exp(uti.m.trend.g.l*c(12:40)) / (1/uti.pa.r0.l -1 + exp(uti.m.trend.g.l*c(12:40)))
+uti.rt.trend.g.u <- exp(uti.m.trend.g.u*c(12:40)) / (1/uti.pa.r0.l -1 + exp(uti.m.trend.g.u*c(12:40)))
+
+data.frame(year = 2012:2040, lwr = uti.rt.trend.g.l, upr = uti.rt.trend.g.u)
+
+#0:12 CI
+uti.rt.l <- uti.PA$freq - 1.96*sqrt(uti.PA$freq*(1-uti.PA$freq)/uti.PA$iso)
+uti.rt.u <- uti.PA$freq + 1.96*sqrt(uti.PA$freq*(1-uti.PA$freq)/uti.PA$iso)
+
+
+#pa.rho.l = (pa.m.l-(pa.theta -1))/at
+#pa.rho.u = (pa.m.u-(pa.theta -1))/at
+
+#sd(simulated.coef[,1])
+#sd(simulated.coef[,2])
+
+
+#m.l <- pa.rho.l*at + pa.theta -1
+#m.u <- pa.rho.u*at + pa.theta -1
+#rt.l <- exp(m.l*c(0:12)) / (1/pa.r0.l -1 + exp(m.l*c(0:12)))
+#rt.u <- exp(m.u*c(0:12)) / (1/pa.r0.u -1 + exp(m.u*c(0:12)))
+```
+
+
+```{r eval = False}
+plot(2000:2011, ylim = c(min(uti.PA$freq), max(uti.rt.trend.g)), xlim = range(2000:2040),y = uti.PA$freq, xlab = "Year", ylab = "Resistance Frequency",main = "Projected Resistance Frequency with/out utiteria Stewardship", pch = 19, type = 'o', cex = 0.3)
+arrows(2000:2011, uti.rt.l, 2000:2011, uti.rt.u, length = 0.03, angle = 90, code = 3, col = "darkorange", pch = 5, cex = 3)
+lines(2012:2040, uti.rt.trend.g.l, lty = 'dashed', col = 'red')
+lines(2012:2040,uti.rt.trend.g.u, lty = 'dashed', col = 'red')
+polygon(c(2012:2040,rev(2012:2040)), c(uti.rt.trend.g.l, rev(uti.rt.trend.g.u)), col = 'grey80', border = NA)
+par(new = T)
+plot(2000:2040, ylim = c(min(uti.PA$freq), max(uti.rt.trend.g)),y = c(uti.PA$freq, uti.rt.trend.g), type = "l", xlab = "Year", ylab = "Resistance Frequency",main = "Projected Resistance Frequency with/out utiteria Stewardship")
+```
+
+#MCMC CI ggplot
+```{r}
+uti1 <- data.frame(Year = 2000:2011, y = uti.PA$freq)
+uti2 <- data.frame(Year = 2000:2040, y= c(uti.PA$freq, uti.rt.trend.g))
+uti3 <- data.frame(Year = 2012:2040, y=  uti.rt.trend.g, lwr = uti.rt.trend.g.l, upr =  uti.rt.trend.g.u)
+
+
+ci.uti <- ggplot(uti2, aes(x=Year, y=y)) + geom_line() + geom_point(data = uti1, size = 0.8) + geom_errorbar(data = uti1, aes(ymin = uti.rt.l, ymax = uti.rt.u), width = 0.4, color = "darkorange") + geom_ribbon(data=uti3, aes(ymin=lwr,ymax=upr), alpha=0.2, fill = "blue") + geom_line(data = uti3, aes(x = Year, y = lwr), linetype = "dashed", color = "darkorange") + geom_line(data = uti3, aes(x = Year, y = upr), linetype = "dashed", color = "darkorange") + theme_classic() + ylab("Resistance Frequency") + ggtitle("UTI") + theme(plot.title =element_text(size=16, face="bold", hjust = 0.5), axis.title.y = element_text(size = 13), axis.title.x = element_text(size = 13), axis.text.x = element_text(size=13),axis.text.y = element_text(size=13)) + labs(tag = "C")
+
+```
+
+
+
+```
+
